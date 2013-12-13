@@ -939,10 +939,10 @@
   </profiles>
 
   <modules>
-    <!--<module>cms</module>-->
+    <module>cms</module>
     <module>commons</module>
-    <!--<module>hst</module>-->
-    <!--<module>repository</module>-->
+    <module>hst</module>
+    <module>repository</module>
     <module>services</module>
     <module>utilities</module>
   </modules>
