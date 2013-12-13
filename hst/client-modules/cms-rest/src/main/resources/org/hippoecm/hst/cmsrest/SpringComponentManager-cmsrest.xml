@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Copyright 2011-2013 Hippo B.V. (http://www.onehippo.com)
+
+  Licensed under the Apache License, Version 2.0 (the  "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+  http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS"
+  BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-3.0.xsd">
+
+  <bean id="annotationJsonSerializer" class="org.hippoecm.hst.rest.custom.AnnotationJsonSerializer">
+    <constructor-arg type="java.lang.Class" value="java.lang.annotation.Annotation" />
+    <property name="typeFieldName" value="@class" />
+  </bean>
+
+  <bean id="cmsRestJacksonJsonModuleVersion" class="org.codehaus.jackson.util.VersionUtil" factory-method="parseVersion">
+    <constructor-arg value="${project.version}" />
+  </bean>
+
+  <bean id="cmsRestJacksonJsonModule" class="org.codehaus.jackson.map.module.SimpleModule">
+    <constructor-arg value="CmsRestJacksonJsonModule" />
+    <constructor-arg>
+      <ref bean="cmsRestJacksonJsonModuleVersion" />
+    </constructor-arg>
+  </bean>
+
+  <bean class="org.springframework.beans.factory.config.MethodInvokingFactoryBean">
+    <property name="targetObject" ref="cmsRestJacksonJsonModule" />
+    <property name="targetMethod" value="addSerializer" />
+    <property name="arguments">
+        <ref bean="annotationJsonSerializer" />
+    </property>
+  </bean>
+
+  <bean id="cmsRestJsonProvider" class="org.codehaus.jackson.jaxrs.JacksonJsonProvider">
+    <property name="mapper" ref="cmsRestJacksonObjectMapper" />
+  </bean>
+
+  <bean id="channelExceptionMapper" class="org.hippoecm.hst.cmsrest.providers.exception.mappers.ChannelExceptionMapper" />
+
+  <bean id="cmsRestJacksonObjectMapper" class="org.codehaus.jackson.map.ObjectMapper" />
+
+  <!-- Enable Jackson JSON ObjectMapper default typing -->
+  <bean class="org.springframework.beans.factory.config.MethodInvokingFactoryBean">
+    <property name="targetObject" ref="cmsRestJacksonObjectMapper" />
+    <property name="targetMethod" value="enableDefaultTyping" />
+  </bean>
+
+  <bean class="org.springframework.beans.factory.config.MethodInvokingFactoryBean">
+    <property name="targetObject" ref="cmsRestJacksonObjectMapper" />
+    <property name="targetMethod" value="enableDefaultTypingAsProperty" />
+    <property name="arguments">
+        <list>
+            <value type="org.codehaus.jackson.map.ObjectMapper.DefaultTyping">OBJECT_AND_NON_CONCRETE</value>
+            <value>@class</value>
+        </list>
+    </property>
+  </bean>
+
+  <bean class="org.springframework.beans.factory.config.MethodInvokingFactoryBean">
+    <property name="targetObject" ref="cmsRestJacksonObjectMapper" />
+    <property name="targetMethod" value="registerModule" />
+    <property name="arguments">
+        <ref bean="cmsRestJacksonJsonModule" />
+    </property>
+  </bean>
+
+  <bean id="jaxrsCmsRestCxfServerFactoryBean" class="org.apache.cxf.jaxrs.JAXRSServerFactoryBean">
+    <property name="address" value="/" />
+    <property name="providers">
+      <list>
+        <ref bean="cmsRestJsonProvider" />
+        <ref bean="channelExceptionMapper" />
+      </list>
+    </property>
+    <property name="resourceProviders">
+      <list>
+        <bean class="org.apache.cxf.jaxrs.lifecycle.SingletonResourceProvider">
+          <constructor-arg>
+            <bean class="org.hippoecm.hst.cmsrest.services.DocumentsResource">
+              <property name="channelManager" ref="org.hippoecm.hst.configuration.channel.ChannelManager"/>
+              <property name="hstLinkCreator" ref="org.hippoecm.hst.core.linking.HstLinkCreator"/>
+            </bean>
+          </constructor-arg>
+        </bean>
+        <bean class="org.apache.cxf.jaxrs.lifecycle.SingletonResourceProvider">
+          <constructor-arg>
+            <bean class="org.hippoecm.hst.cmsrest.services.ChannelsResource">
+              <property name="channelManager" ref="org.hippoecm.hst.configuration.channel.ChannelManager"/>
+            </bean>
+          </constructor-arg>
+        </bean>
+        <bean class="org.apache.cxf.jaxrs.lifecycle.SingletonResourceProvider">
+          <constructor-arg>
+            <bean class="org.hippoecm.hst.cmsrest.services.BlueprintsResource">
+              <property name="channelManager" ref="org.hippoecm.hst.configuration.channel.ChannelManager"/>
+            </bean>
+          </constructor-arg>
+        </bean>
+        <bean class="org.apache.cxf.jaxrs.lifecycle.SingletonResourceProvider">
+          <constructor-arg>
+            <bean class="org.hippoecm.hst.cmsrest.services.SitesResource" />
+          </constructor-arg>
+        </bean>
+      </list>
+    </property>
+  </bean>
+
+  <bean id="jaxrsCmsRestService" class="org.hippoecm.hst.jaxrs.cxf.CXFJaxrsService">
+    <constructor-arg value="jaxrsCmsRestService"/>
+    <property name="servletPath" value=""/>
+    <property name="jaxrsServerFactoryBean" ref="jaxrsCmsRestCxfServerFactoryBean"/>
+  </bean>
+
+  <!-- Pipelining -->
+  
+  <bean id="jaxrsCmsRestServiceValve" class="org.hippoecm.hst.core.container.JaxrsRestServiceValve">
+    <property name="valveName" value="jaxrsCmsRestServiceValve" />
+    <constructor-arg ref="jaxrsCmsRestService"/>
+  </bean>
+
+  <bean class="org.springframework.beans.factory.config.MethodInvokingFactoryBean">
+    <property name="targetObject">
+      <bean class="org.springframework.beans.factory.config.PropertyPathFactoryBean">
+        <property name="targetObject" ref="org.hippoecm.hst.core.container.Pipelines" />
+        <property name="propertyPath" value="pipelines"/>
+      </bean>
+    </property>
+    <property name="targetMethod" value="put" />
+    <property name="arguments">
+      <list>
+        <value>CmsRestPipeline</value>
+        <bean class="org.hippoecm.hst.core.container.HstSitePipeline">
+          <property name="initializationValves">
+            <list>
+              <ref bean="initializationValve" />
+              <ref bean="cmsHostRestRequestContextValve"/>
+              <!--  Both cmsRestSecurityValve and cmsRestCredentialsToJcrSessionPropagatorValve
+                    must be applied in this order -->
+
+              <ref bean="cmsRestSecurityValve"/>
+              <ref bean="cmsRestCredentialsToJcrSessionPropagatorValve"/>
+            </list>
+          </property>
+          <property name="processingValves">
+            <list>
+              <ref bean="noCacheResponseHeadersValve" />
+              <ref bean="jaxrsCmsRestServiceValve" />
+            </list>
+          </property>
+          <property name="cleanupValves">
+            <list>
+              <ref bean="cleanupValve" />
+              <ref bean="diagnosticReportingValve" />
+            </list>
+          </property>
+        </bean>
+      </list>
+    </property>
+  </bean>
+
+  <!-- configure that call to the programmatic creation of the _cmsrest Mount for Host 127.0.0.1 -->
+  <bean class="org.springframework.beans.factory.config.MethodInvokingFactoryBean">
+    <property name="targetObject" ref="org.hippoecm.hst.configuration.model.HstManager"/>
+    <property name="targetMethod" value="addHstConfigurationAugmenter"/>
+    <property name="arguments">
+        <bean class="org.hippoecm.hst.core.hosting.CustomMountAndVirtualHostAugmenter">
+           <property name="customMountName" value="_cmsrest"/>
+           <property name="customHostName" value="127.0.0.1"/>
+           <property name="customMountNamedPipeline" value="CmsRestPipeline"/>
+           <!--
+             the type must be 'live' as the links that are created through the CMS rest mount need to be 'live' links.
+             The CMS will decorate these live links to preview.
+           -->
+           <property name="customMountType" value="live"/>
+        </bean>
+    </property>
+  </bean>
+</beans>
